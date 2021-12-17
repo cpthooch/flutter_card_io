@@ -2,6 +2,10 @@ package com.varunvairavan.fluttercardio;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.os.Build;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.RequiresApi;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -9,6 +13,10 @@ import java.util.Map;
 import io.card.payment.CardIOActivity;
 import io.card.payment.CardType;
 import io.card.payment.CreditCard;
+import io.flutter.embedding.engine.plugins.activity.ActivityAware;
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
+import io.flutter.plugin.common.BinaryMessenger;
+import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
@@ -21,25 +29,71 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin;
 /**
  * FlutterCardIoPlugin
  */
-public class FlutterCardIoPlugin implements MethodCallHandler, ActivityResultListener, FlutterPlugin {
+public class FlutterCardIoPlugin implements MethodCallHandler, ActivityResultListener, FlutterPlugin, ActivityAware {
     private static final int MY_SCAN_REQUEST_CODE = 100;
+    private static final String METHOD_CHANNEL_NAME = "flutter_card_io";
 
-    private final PluginRegistry.Registrar registrar;
+    private  FlutterPlugin.FlutterPluginBinding pluginBinding;
+    private Activity activity;
+    private ActivityPluginBinding activityBinding;
+    private MethodChannel channel;
     private Result pendingResult;
-    private MethodCall methodCall;
 
-    /**
-     * Plugin registration.
-     */
-    public static void registerWith(Registrar registrar) {
-        final MethodChannel channel = new MethodChannel(registrar.messenger(), "flutter_card_io");
-        FlutterCardIoPlugin instance = new FlutterCardIoPlugin(registrar);
-        registrar.addActivityResultListener(instance);
-        channel.setMethodCallHandler(instance);
+    @Override
+    public void onAttachedToEngine(FlutterPlugin.FlutterPluginBinding binding) {
+        pluginBinding = binding;
     }
 
-    private FlutterCardIoPlugin(PluginRegistry.Registrar registrar) {
-        this.registrar = registrar;
+    @Override
+    public void onDetachedFromEngine(FlutterPlugin.FlutterPluginBinding binding) {
+        pluginBinding = null;
+    }
+
+    @Override
+    public void onDetachedFromActivity() {
+        clearPluginSetup();
+    }
+
+    @Override
+    public void onReattachedToActivityForConfigChanges(ActivityPluginBinding binding) {
+        onAttachedToActivity(binding);
+    }
+
+    @Override
+    public void  onAttachedToActivity(ActivityPluginBinding binding) {
+        activityBinding = binding;
+
+        createPluginSetup(
+                pluginBinding.getBinaryMessenger(),
+                activityBinding.getActivity(),
+                activityBinding);
+    }
+
+    @Override
+    public void onDetachedFromActivityForConfigChanges() {
+        onDetachedFromActivity();
+    }
+
+    @RequiresApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
+    private void createPluginSetup(
+            BinaryMessenger messenger,
+            Activity activity,
+            ActivityPluginBinding activityBinding) {
+
+        this.activity = activity;
+
+        channel = new MethodChannel(messenger, METHOD_CHANNEL_NAME);
+        channel.setMethodCallHandler(this);
+
+        activityBinding.addActivityResultListener(this);
+    }
+
+    private void clearPluginSetup() {
+        activity = null;
+        activityBinding.removeActivityResultListener(this);
+        activityBinding = null;
+        channel.setMethodCallHandler(null);
+        channel = null;
     }
 
     @Override
@@ -49,81 +103,79 @@ public class FlutterCardIoPlugin implements MethodCallHandler, ActivityResultLis
             return;
         }
 
-        Activity activity = registrar.activity();
         if (activity == null) {
             result.error("no_activity", "flutter_card_io plugin requires a foreground activity.", null);
             return;
         }
 
         pendingResult = result;
-        methodCall = call;
 
         if (call.method.equals("scanCard")) {
             Intent scanIntent = new Intent(activity, CardIOActivity.class);
 
             boolean requireExpiry = false;
-            if (methodCall.hasArgument("requireExpiry")) {
-                requireExpiry = methodCall.argument("requireExpiry");
+            if (call.hasArgument("requireExpiry")) {
+                requireExpiry = call.argument("requireExpiry");
             }
 
             boolean requireCVV = false;
-            if (methodCall.hasArgument("requireCVV")) {
-                requireCVV = methodCall.argument("requireCVV");
+            if (call.hasArgument("requireCVV")) {
+                requireCVV = call.argument("requireCVV");
             }
 
             boolean requirePostalCode = false;
-            if (methodCall.hasArgument("requirePostalCode")) {
-                requirePostalCode = methodCall.argument("requirePostalCode");
+            if (call.hasArgument("requirePostalCode")) {
+                requirePostalCode = call.argument("requirePostalCode");
             }
 
             boolean requireCardHolderName = false;
-            if (methodCall.hasArgument("requireCardHolderName")) {
-                requireCardHolderName = methodCall.argument("requireCardHolderName");
+            if (call.hasArgument("requireCardHolderName")) {
+                requireCardHolderName = call.argument("requireCardHolderName");
             }
 
             boolean restrictPostalCodeToNumericOnly = false;
-            if (methodCall.hasArgument("restrictPostalCodeToNumericOnly")) {
-                restrictPostalCodeToNumericOnly = methodCall.argument("restrictPostalCodeToNumericOnly");
+            if (call.hasArgument("restrictPostalCodeToNumericOnly")) {
+                restrictPostalCodeToNumericOnly = call.argument("restrictPostalCodeToNumericOnly");
             }
 
             boolean scanExpiry = true;
-            if (methodCall.hasArgument("scanExpiry")) {
-                scanExpiry = methodCall.argument("scanExpiry");
+            if (call.hasArgument("scanExpiry")) {
+                scanExpiry = call.argument("scanExpiry");
             }
 
             String scanInstructions = null;
-            if (methodCall.hasArgument("scanInstructions")) {
-                scanInstructions = methodCall.argument("scanInstructions");
+            if (call.hasArgument("scanInstructions")) {
+                scanInstructions = call.argument("scanInstructions");
             }
 
             boolean suppressManualEntry = false;
-            if (methodCall.hasArgument("suppressManualEntry")) {
-                suppressManualEntry = methodCall.argument("suppressManualEntry");
+            if (call.hasArgument("suppressManualEntry")) {
+                suppressManualEntry = call.argument("suppressManualEntry");
             }
 
             boolean suppressConfirmation = false;
-            if (methodCall.hasArgument("suppressConfirmation")) {
-                suppressConfirmation = methodCall.argument("suppressConfirmation");
+            if (call.hasArgument("suppressConfirmation")) {
+                suppressConfirmation = call.argument("suppressConfirmation");
             }
 
             boolean useCardIOLogo = false;
-            if (methodCall.hasArgument("useCardIOLogo")) {
-                useCardIOLogo = methodCall.argument("useCardIOLogo");
+            if (call.hasArgument("useCardIOLogo")) {
+                useCardIOLogo = call.argument("useCardIOLogo");
             }
 
             boolean hideCardIOLogo = false;
-            if (methodCall.hasArgument("hideCardIOLogo")) {
-                hideCardIOLogo = methodCall.argument("hideCardIOLogo");
+            if (call.hasArgument("hideCardIOLogo")) {
+                hideCardIOLogo = call.argument("hideCardIOLogo");
             }
 
             boolean usePayPalActionbarIcon = true;
-            if (methodCall.hasArgument("usePayPalActionbarIcon")) {
-                usePayPalActionbarIcon = methodCall.argument("usePayPalActionbarIcon");
+            if (call.hasArgument("usePayPalActionbarIcon")) {
+                usePayPalActionbarIcon = call.argument("usePayPalActionbarIcon");
             }
 
             boolean keepApplicationTheme = false;
-            if (methodCall.hasArgument("keepApplicationTheme")) {
-                keepApplicationTheme = methodCall.argument("keepApplicationTheme");
+            if (call.hasArgument("keepApplicationTheme")) {
+                keepApplicationTheme = call.argument("keepApplicationTheme");
             }
 
             // customize these values to suit your needs.
@@ -196,7 +248,6 @@ public class FlutterCardIoPlugin implements MethodCallHandler, ActivityResultLis
                 pendingResult.success(null);
             }
             pendingResult = null;
-            methodCall = null;
             return true;
         }
         return false;
